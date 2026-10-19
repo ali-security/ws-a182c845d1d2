@@ -331,6 +331,61 @@ describe('Sender', () => {
       );
     });
 
+    it('throws an error if the second argument is invalid', () => {
+      const mockSocket = new MockSocket();
+      const sender = new Sender(mockSocket);
+
+      assert.throws(
+        () => sender.close(1000, new Float32Array(20)),
+        /^TypeError: Second argument must be a string or a Uint8Array$/
+      );
+    });
+
+    it('does not send uninitialized memory if the reason is not a Uint8Array', () => {
+      let writes = 0;
+      const mockSocket = new MockSocket({
+        write: () => {
+          writes++;
+        }
+      });
+      const sender = new Sender(mockSocket);
+
+      [
+        new Uint16Array(10),
+        new Int32Array(10),
+        new Float32Array(20),
+        new Float64Array(10)
+      ].forEach((data) => {
+        assert.throws(
+          () => sender.close(1000, data, false),
+          /^TypeError: Second argument must be a string or a Uint8Array$/
+        );
+      });
+
+      assert.strictEqual(writes, 0);
+    });
+
+    it('sends the reason if it is a string, a Buffer, or a Uint8Array', () => {
+      const chunks = [];
+      const mockSocket = new MockSocket({
+        write: (data) => {
+          chunks.push(data);
+        }
+      });
+      const sender = new Sender(mockSocket);
+      const expected = Buffer.from([0x88, 0x05, 0x03, 0xe8, 0x66, 0x6f, 0x6f]);
+
+      [
+        'foo',
+        Buffer.from('foo'),
+        new Uint8Array([0x66, 0x6f, 0x6f])
+      ].forEach((data) => {
+        chunks.length = 0;
+        sender.close(1000, data, false);
+        assert.ok(Buffer.concat(chunks).equals(expected));
+      });
+    });
+
     it('throws an error if the message is greater than 123 bytes', () => {
       const mockSocket = new MockSocket();
       const sender = new Sender(mockSocket);
